@@ -57,6 +57,29 @@ static void MX_ADC1_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+uint16_t ADC_VAL = 0;	//we're using 12 bit ADC, we need atleast 16bit to store the raw ADC value [0–4095]
+int scaledValue = 0;	//maps the raw ADC value to more convenient value eg [0-100]
+int count=0;
+
+//function to map the raw ADC values to scaled values, long has bigger range than int
+long map(long x, long in_min, long in_max, long out_min, long out_max)
+{
+  return (x - in_min) * (out_max - out_min + 1) / (in_max - in_min + 1) + out_min;
+}
+
+	//in ADC Interrupt, the adc will execute the conversion in the background and trigger "Conversion Complete" Interrupt.
+	//Then conversion complete callback function will be called. CPU only steps in to read the result during the interrupt.
+	//In continuous conversion mode, the adc will restart automatically after the previous conversion is complete
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+	//we can process the data in this callback function
+	ADC_VAL = HAL_ADC_GetValue(&hadc1);
+	scaledValue = map(ADC_VAL, 0, 4095, 0, 100);
+	count++;
+}
+
+
 /* USER CODE END 0 */
 
 /**
@@ -91,6 +114,13 @@ int main(void)
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
 
+//Dont set the ADC clock too high. If the conversion time is very low, the interrupts will
+//trigger at an extremely high rate and this will make the while loop unusable. Tradeoff
+//between the sampling rate and the while loop
+
+
+  HAL_ADC_Start_IT(&hadc1);	//run outside of while loop because continous conv is enabled
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -100,6 +130,10 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+	  HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+      HAL_Delay(500);	//500ms delay, manually sets the ADC to run at 2Hz
+
   }
   /* USER CODE END 3 */
 }
@@ -181,7 +215,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
   hadc1.Init.ScanConvMode = DISABLE;
-  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.ContinuousConvMode = ENABLE;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
